@@ -1,0 +1,15 @@
+<?php
+
+namespace App\Enums;
+
+enum ReviewJobStatus: string
+{
+    case Pending = 'pending';
+    case Processing = 'processing';
+    case Completed = 'completed';
+    case Failed = 'failed';
+    case Cancelled = 'cancelled';
+    case Running = 'running';
+
+
+}

@@ -1,0 +1,52 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Hostinger Staging
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH_STAGING }}
+            git fetch origin
+            git checkout staging
+            git reset --hard origin/staging
+            composer install --no-dev --optimize-autoloader --no-interaction
+            ln -sfn public/index.php index.php
+            ln -sfn public/build build
+            cp public/.htaccess .htaccess
+            ln -sfn ../storage/app/public public/storage || true
+            # Never rotate APP_KEY on redeploy — that breaks Crypt payloads (2FA secrets,
+            # encrypted integration credentials). Generate only for a brand-new .env.
+            if [ ! -f .env ]; then
+              cp .env.example .env
+              php artisan key:generate --force || true
+            fi
+            php artisan migrate --force || true
+            php artisan config:clear || true
+            php artisan cache:clear || true
+            php artisan route:clear || true
+            php artisan view:clear || true
+            php artisan config:cache || true
+            php artisan route:cache || true
+            php artisan view:cache || true
+            php artisan event:cache || true
+            echo "--- Recent Laravel Logs ---"
+            tail -n 30 storage/logs/laravel.log || true
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl --fail "${{ secrets.APP_URL_STAGING }}/health" || exit 1
