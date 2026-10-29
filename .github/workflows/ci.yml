@@ -1,0 +1,79 @@
+# GitHub Actions Continuous Integration Workflow
+name: Laravel CI
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - 'feature/**'
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  laravel-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: qa_platform_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, xml, bcmath, curl, zip, pdo_mysql
+          coverage: none
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Install Dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install NPM Dependencies & Build Assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy Environment
+        run: cp .env.example .env
+
+      - name: Generate Key
+        run: php artisan key:generate
+
+      - name: Configure MySQL Test Environment
+        run: |
+          echo "DB_CONNECTION=mysql" >> .env
+          echo "DB_HOST=127.0.0.1" >> .env
+          echo "DB_PORT=3306" >> .env
+          echo "DB_DATABASE=qa_platform_test" >> .env
+          echo "DB_USERNAME=root" >> .env
+          echo "DB_PASSWORD=" >> .env
+
+      - name: Run Migrations
+        run: php artisan migrate --force
+
+      - name: PHP Syntax Check
+        run: find app routes config -name "*.php" -exec php -l {} \;
+
+      - name: Run Tests
+        run: php artisan test
